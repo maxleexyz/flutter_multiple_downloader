@@ -3,12 +3,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 class UnsupportedException extends Error {
-  @override
   String errMsg() => "Not support range request";
 }
 
 class DownloadFailureException extends Error {
-  @override
   String errMsg() => "Download Failure";
 }
 
@@ -16,35 +14,40 @@ class Chunk {
   int partNumber;
   int startOffset;
   int endOffset;
-  bool finished;
-  List<int> data;
+  bool? finished;
+  List<int>? data;
   Chunk(this.partNumber, this.startOffset, this.endOffset) {
     finished = false;
     data = <int>[];
   }
   @override
   String toString() {
-    return "n:$partNumber, data:${data.length}";
+    return "n:$partNumber, data:${data?.length}";
   }
 }
 
 class ProcessState {
   String url;
   int fileSize;
-  List<Chunk> chunks;
+  List<Chunk> chunks = [];
   int successCount;
-  int _chunkSize;
-  ProcessState(this.url, {int chunkSize: 0}) {
-    _chunkSize = chunkSize;
-    fileSize = 0;
-    successCount = 0;
+  int chunkSize;
+  ProcessState(
+    this.url, {
+    this.chunkSize = 0,
+    this.fileSize = 0,
+    this.successCount = 0,
+  }) {
+    // _chunkSize = chunkSize;
+    // fileSize = 0;
+    // successCount = 0;
   }
   init(int size) {
     fileSize = size;
     chunks = <Chunk>[];
     for (var i = 0; i < 600; i++) {
-      final startIdx = i * _chunkSize;
-      var endIdx = (i + 1) * _chunkSize;
+      final startIdx = i * chunkSize;
+      var endIdx = (i + 1) * chunkSize;
       if (endIdx > fileSize) {
         endIdx = fileSize;
       }
@@ -59,7 +62,7 @@ class ProcessState {
   Uint8List asList() {
     final result = <int>[];
     for (var ck in this.chunks) {
-      result.addAll(ck.data);
+      result.addAll(ck.data!);
     }
     return Uint8List.fromList(result);
   }
@@ -74,21 +77,26 @@ typedef void OnPercentage(int done, int total);
 
 class Downloader {
   static final Map<String, Downloader> _cache = <String, Downloader>{};
-  ProcessState state;
-  HttpClient client;
-  int processors;
-  String downloadUrl;
-  StreamController<ProcessState> controller;
-  OnPercentage _onPercentage;
-  bool noError;
-  bool fetching;
+  late ProcessState state;
+  late HttpClient client;
 
-  factory Downloader(String url, {int chunkSize: 501001, int p: 2}) {
+  String? downloadUrl;
+  StreamController<ProcessState>? controller;
+  OnPercentage? _onPercentage;
+  int processors = -1;
+  bool noError = false;
+  bool fetching = false;
+
+  factory Downloader(String url, {int chunkSize = 501001, int p = 2}) {
     return _cache.putIfAbsent(
         url, () => Downloader._internal(url, chunkSize: chunkSize, p: p));
   }
 
-  Downloader._internal(String url, {int chunkSize: 501001, int p: 2}) {
+  Downloader._internal(
+    String url, {
+    int chunkSize = 501001,
+    int p = 2,
+  }) {
     downloadUrl = url;
     state = ProcessState(url, chunkSize: chunkSize);
     client = new HttpClient();
@@ -97,14 +105,14 @@ class Downloader {
     fetching = false;
   }
 
-  Future<ProcessState> download({OnPercentage onPercentage}) async {
+  Future<ProcessState> download({OnPercentage? onPercentage}) async {
     _onPercentage = onPercentage;
     final req = await client.headUrl(Uri.parse(state.url));
     final resp = await req.close();
-    if (resp.headers['accept-ranges'].first != 'bytes') {
+    if (resp.headers['accept-ranges']?.first != 'bytes') {
       throw UnsupportedException();
     }
-    final fileSize = int.parse(resp.headers['content-length'].first);
+    final fileSize = int.parse(resp.headers['content-length']!.first);
     this.state.init(fileSize);
     final indexies = List<int>.generate(15, (i) => i);
     fetching = true;
@@ -123,10 +131,10 @@ class Downloader {
   Future<Stream<ProcessState>> downStream() async {
     final req = await client.headUrl(Uri.parse(state.url));
     final resp = await req.close();
-    if (resp.headers['accept-ranges'].first != 'bytes') {
+    if (resp.headers['accept-ranges']?.first != 'bytes') {
       throw UnsupportedException();
     }
-    final fileSize = int.parse(resp.headers['content-length'].first);
+    final fileSize = resp.headers.contentLength;
     this.state.init(fileSize);
     controller = new StreamController<ProcessState>();
     final indexies = List<int>.generate(15, (i) => i);
@@ -134,7 +142,7 @@ class Downloader {
     for (var pid in indexies.sublist(0, processors)) {
       processor(state, pid, processors);
     }
-    return controller.stream;
+    return controller!.stream;
   }
 
   Future processor(ProcessState state, int pid, int pcount) async {
@@ -143,17 +151,17 @@ class Downloader {
         try {
           final st = await downChunk(state, chunk.partNumber - 1);
           if (controller != null) {
-            controller.add(st);
+            controller!.add(st);
           }
           if (_onPercentage != null) {
-            _onPercentage(st.successCount, st.chunks.length);
+            _onPercentage!(st.successCount, st.chunks.length);
           }
-        } on DownloadFailureException catch (e) {
+        } on DownloadFailureException {
           this.noError = false;
           if (controller != null) {
             print('close stream');
             fetching = false;
-            controller.close();
+            controller?.close();
             _cache.remove(state.url);
             controller = null;
           } else {
@@ -166,7 +174,7 @@ class Downloader {
       if (controller != null) {
         print('close stream');
         fetching = false;
-        controller.close();
+        controller?.close();
       }
     }
   }
@@ -180,7 +188,7 @@ class Downloader {
     final resp = await req.close();
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       for (var ls in await resp.toList()) {
-        ck.data.addAll(ls);
+        ck.data?.addAll(ls);
       }
     } else {
       throw DownloadFailureException();

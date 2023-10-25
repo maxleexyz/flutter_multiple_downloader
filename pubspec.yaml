@@ -1,12 +1,9 @@
 name: flutter_multiple_downloader
 description: A new Flutter package project.
 version: 0.0.7
-author:
-homepage:
 
 environment:
-  sdk: ">=2.7.0 <3.0.0"
-  flutter: ">=1.17.0"
+  sdk: '>=3.1.4 <4.0.0'
 
 dependencies:
   flutter:

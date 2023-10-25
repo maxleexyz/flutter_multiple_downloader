@@ -18,7 +18,8 @@ void main() {
         "http://app01.78x56.com/Xii_2021-03-13%2010%EF%BC%9A41.ipa",
         p: 11);
 
-    final st = dl.fetching ? dl.controller.stream : await dl.downStream();
+    final st = dl.fetching ? dl.controller?.stream : await dl.downStream();
+    if (st == null) return;
     await for (var state in st) {
       print("${state.successCount}/${state.chunks.length}");
     }
